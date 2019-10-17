@@ -1,103 +1,51 @@
-FROM php:7.0.33-fpm
+FROM php:7.0.33-fpm-alpine
 
-# disable interactive functions
-ENV DEBIAN_FRONTEND noninteractive
+# intl, zip, soap
+RUN apk add --update --no-cache libintl icu icu-dev libxml2-dev \
+    && docker-php-ext-install intl zip soap
 
-#For fixed: Failed to fetch Debian Jessie-updates
-RUN sed -i '/jessie-updates/d' /etc/apt/sources.list
+# mysqli, pdo, pdo_mysql
+RUN docker-php-ext-install mysqli pdo pdo_mysql
 
-RUN apt-get update \
-	&& apt-get install -y --no-install-recommends \
-		equivs \
-		fakeroot \
-		gdb \
-		gnupg \
-		imagemagick \
-		libmagickwand-dev \
-		sudo \
-		curl \
-		libz-dev \
-		libpq-dev \
-		libjpeg-dev \
-		libpng-dev \
-		libfreetype6-dev \
-		libssl-dev \
-		libmcrypt-dev \
-		libxml2-dev \
-		locales \
-	&& rm -rf /var/lib/apt/lists/*
+# mcrypt, gd, iconv
+RUN apk add --update --no-cache \
+        freetype-dev \
+        libjpeg-turbo-dev \
+        libmcrypt-dev \
+        libpng-dev \
+    && docker-php-ext-install -j"$(getconf _NPROCESSORS_ONLN)" iconv mcrypt \
+    && docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
+    && docker-php-ext-install -j"$(getconf _NPROCESSORS_ONLN)" gd
 
-# Reconfigure locales
-RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
-		&& echo "ru_RU.UTF-8 UTF-8" >> /etc/locale.gen \
-		&& locale-gen \
-        && rm /etc/localtime \
-	    && ln -s /usr/share/zoneinfo/Europe/Kiev /etc/localtime \
-	    && date
+# imagick
+RUN apk add --update --no-cache autoconf g++ imagemagick-dev libtool make pcre-dev \
+    && pecl install imagick \
+    && docker-php-ext-enable imagick \
+    && apk del autoconf g++ libtool make pcre-dev
+
+# ftp
+RUN apk add --no-cache openssl-dev \
+    && docker-php-ext-install ftp
 
 # Install PHP extensions
-RUN docker-php-ext-configure gd \
-    	--enable-gd-native-ttf \
-    	--with-jpeg-dir=/usr/lib \
-    	--with-freetype-dir=/usr/include/freetype2 \
-	&& pecl install imagick && docker-php-ext-enable imagick \
-    && docker-php-ext-install \
-		gd \
+RUN docker-php-ext-install \
 		ctype \
-		dom \
 		exif \
 		fileinfo \
 		calendar \
-		ftp \
-		gettext \
-		iconv \
 		json \
 		mbstring \
-		mcrypt \
-		pdo \
 		posix \
 		shmop \
-		simplexml \
 		sockets \
 		sysvmsg \
 		sysvsem \
 		sysvshm \
 		tokenizer \
-		xml \
-		xmlwriter \
-		zip \
-		mysqli \
-		pdo_mysql \
-		wddx \
-		bcmath \
-		pcntl \ 
-		opcache \
-	&& docker-php-ext-enable \
-		gd \
-		ctype \
 		dom \
-		exif \
-		fileinfo \
-		ftp \
-		gettext \
-		iconv \
-		json \
-		mbstring \
-		mcrypt \
-		pdo \
-		posix \
-		shmop \
 		simplexml \
-		sockets \
-		sysvmsg \
-		sysvsem \
-		sysvshm \
-		tokenizer \
 		xml \
 		xmlwriter \
-		zip \
-		mysqli \
-		pdo_mysql \
 		wddx \
 		bcmath \
 		pcntl \ 
@@ -109,15 +57,9 @@ RUN curl -sS https://getcomposer.org/installer | php -- \
 	    --install-dir=/usr/bin \
 	    --filename=composer
 
-# Clear
-RUN apt-get autoremove -y \
-	&& apt-get clean -y \
-	&& rm -rf /tmp/* /var/tmp/* \
-	&& find /var/cache/apt/archives /var/lib/apt/lists -not -name lock -type f -delete \
-	&& find /var/cache -type f -delete
-
-RUN mkdir -p /var/www/api-html && chown www-data:www-data /var/www/api-html && chmod 777 /var/www/api-html
+# Bash
+RUN apk add --update --no-cache bash
 
 USER www-data
-VOLUME /var/www/api-html
-WORKDIR /var/www/api-html
+VOLUME /var/www/site
+WORKDIR /var/www/site
